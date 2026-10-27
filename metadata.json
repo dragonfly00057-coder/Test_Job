@@ -1,0 +1,6 @@
+{
+  "name": "MatinalJob - Radar de l'Emploi Régional",
+  "description": "Plateforme quotidienne d'analyse matinale du marché de l'emploi par région et secteur : synthèse IA des tendances du jour, radar des offres fraîches, baromètre salarial et compétences émergentes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
