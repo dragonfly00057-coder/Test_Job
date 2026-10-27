@@ -20,6 +20,7 @@ import {
 } from './types/jobMarket';
 import { generateDefaultBrief, SAMPLE_OFFERS } from './data/regionalJobData';
 import { MapPin, Briefcase, SlidersHorizontal, Sun, Clock } from 'lucide-react';
+import avatarImg from './assets/images/avatar_user_morning_1793106913725.jpg';
 
 const STORAGE_PREFS_KEY = 'matinal_job_preferences_v1';
 const STORAGE_APPS_KEY = 'matinal_job_applications_v1';
@@ -245,7 +246,7 @@ export default function App() {
             {/* User profile avatar & current focus */}
             <div className="flex items-center gap-3">
               <img
-                src="/src/assets/images/avatar_user_morning_1793106913725.jpg"
+                src={avatarImg}
                 alt="Portrait profil veille emploi"
                 referrerPolicy="no-referrer"
                 className="w-9 h-9 rounded-full object-cover ring-2 ring-slate-100"
