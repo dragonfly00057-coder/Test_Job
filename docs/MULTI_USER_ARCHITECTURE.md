@@ -49,6 +49,10 @@
 7. Adapter les endpoints briefing et matching pour charger le profil du compte côté serveur.
 8. Ajouter des tests d'isolation : un compte A ne peut jamais lire, modifier ou supprimer les données du compte B.
 
+## Configuration locale Better Auth
+
+Ajouter dans `.env` : `BETTER_AUTH_SECRET` (secret aléatoire d'au moins 32 caractères) et `BETTER_AUTH_URL=http://localhost:3000`. Le secret ne doit jamais être commité ni exposé au frontend.
+
 ## Décisions à confirmer avant le premier changement technique
 
 - Mode de développement : PostgreSQL local via Docker Compose (recommandé) ou instance PostgreSQL distante.
