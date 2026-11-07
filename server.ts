@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import { generateDefaultBrief, generateDynamicRegionalOffers } from './src/data/regionalJobData';
 import { FrenchRegion, JobDomain, UserPreferences } from './src/types/jobMarket';
 import { checkOllama, runAssistedBriefingAgents, runOfferMatcher } from './src/server/ollamaAgents';
+import { toNodeHandler } from 'better-auth/node';
+import { auth } from './src/server/auth';
 import { checkDatabaseConnection } from './src/db';
 
 dotenv.config();
@@ -14,6 +16,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+// Better Auth must be mounted before express.json() so it can read request bodies.
+app.all('/api/auth/*', toNodeHandler(auth));
 
 app.use(express.json({ limit: '1mb' }));
 
