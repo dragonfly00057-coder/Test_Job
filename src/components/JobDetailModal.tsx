@@ -186,7 +186,7 @@ export const JobDetailModal: React.FC<JobDetailModalProps> = ({
 
             {isLoading ? (
               <div className="py-6 text-center text-xs text-slate-500">
-                Analyse de votre profil en cours avec Gemini 3.8 Flash...
+                Analyse de votre profil en cours avec Ollama · Qwen3...
               </div>
             ) : analysis ? (
               <div className="space-y-4 text-xs">
