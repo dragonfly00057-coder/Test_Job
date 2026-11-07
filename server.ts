@@ -46,6 +46,7 @@ app.post('/api/market-brief', async (req, res) => {
   const validJob = body.jobTitle || 'Administrateur systèmes et réseaux';
   const preferences = {
     region: validRegion,
+    department: typeof body.department === 'string' ? body.department : undefined,
     domain: validDomain,
     jobTitle: validJob,
     experienceLevel: body.experienceLevel || 'Intermédiaire (3-5 ans)',
