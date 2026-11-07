@@ -109,6 +109,22 @@ export const PreferencesModal: React.FC<PreferencesModalProps> = ({
             )}
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+              Département prioritaire (optionnel)
+            </label>
+            <input
+              type="text"
+              value={formState.department || ''}
+              onChange={(e) => setFormState({ ...formState, department: e.target.value || undefined })}
+              placeholder="Ex : 57 pour la Moselle"
+              className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              Permet de privilégier un département au sein de la région sélectionnée.
+            </p>
+          </div>
+
           {/* Domaine & Métier */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
