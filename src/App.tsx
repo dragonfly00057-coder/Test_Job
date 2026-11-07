@@ -62,6 +62,8 @@ export default function App() {
   );
   const [offers, setOffers] = useState<JobOffer[]>(SAMPLE_OFFERS);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dataNotice, setDataNotice] = useState('Les offres affichées sont actuellement des données locales de démonstration.');
+  const [agentRuns, setAgentRuns] = useState<Array<{ id: string; name: string; status: string; summary: string }>>([]);
 
   // 5. Saved & Applied tracking
   const [savedOfferIds, setSavedOfferIds] = useState<string[]>(() => {
@@ -138,6 +140,8 @@ export default function App() {
           if (data?.brief) {
             setBrief(data.brief);
           }
+          setDataNotice(data?.dataNotice || 'Analyse terminée. Vérifiez la provenance des offres avant de candidater.');
+          setAgentRuns(Array.isArray(data?.agents) ? data.agents : []);
           if (data?.offers && data.offers.length > 0) {
             setOffers(data.offers);
           }
@@ -151,7 +155,8 @@ export default function App() {
         }
       } catch (err) {
         console.error('Error fetching brief from server, using local fallback:', err);
-        setBrief(generateDefaultBrief(prefs.region, prefs.domain, prefs.jobTitle));
+        setDataNotice('Ollama est indisponible : le briefing IA n’a pas été actualisé. Les offres locales restent des exemples.');
+        setAgentRuns([]);
         setLastUpdatedTime(
           new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
         );
@@ -284,6 +289,33 @@ export default function App() {
         </div>
       </div>
 
+      {dataNotice && (
+        <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+            <strong>Provenance des données :</strong> {dataNotice}
+          </div>
+          {agentRuns.length > 0 && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-900">Équipe d’agents MatinalJob</h2>
+                <span className="text-[11px] font-medium text-slate-500">Ollama · Qwen3</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {agentRuns.map((agent) => (
+                  <div key={agent.id} className="rounded-lg bg-slate-50 p-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+                      <span className={agent.status === 'completed' ? 'h-2 w-2 rounded-full bg-emerald-500' : 'h-2 w-2 rounded-full bg-red-500'} />
+                      {agent.name}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-600">{agent.summary}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main Viewport Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {activeTab === 'brief' && (
@@ -339,7 +371,7 @@ export default function App() {
               <span>Observatoire Quotidien du Marché de l'Emploi Régional</span>
             </div>
             <div>
-              <span>Données consolidées & analyses générées avec Google Gemini</span>
+              <span>Analyses locales générées avec Ollama · Qwen3</span>
             </div>
           </div>
         </div>
