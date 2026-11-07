@@ -26,16 +26,29 @@ const STORAGE_PREFS_KEY = 'matinal_job_preferences_v1';
 const STORAGE_APPS_KEY = 'matinal_job_applications_v1';
 const STORAGE_SAVED_KEY = 'matinal_job_saved_ids_v1';
 
+// Default profile for the first MatinalJob user. In a multi-user deployment,
+// this object will become the onboarding template; each account will own its profile.
 const DEFAULT_PREFERENCES: UserPreferences = {
-  region: 'Auvergne-Rhône-Alpes',
+  region: 'Grand Est',
+  department: '57',
   domain: 'Informatique & Tech',
-  jobTitle: 'Développeur Fullstack',
-  experienceLevel: 'Intermédiaire (3-5 ans)',
+  jobTitle: 'Administrateur systèmes et réseaux / Chef de projet technique IT',
+  experienceLevel: 'Junior (0-2 ans)',
   remotePreference: 'Hybride (2-3j/semaine)',
   morningTime: '07:30',
-  minSalaryTarget: 50,
   notificationEnabled: true,
-  userSkills: ['React / TypeScript', 'Node.js', 'PostgreSQL', 'Docker', 'API REST'],
+  userSkills: [
+    'Windows Server',
+    'Administration systèmes et réseaux',
+    'Virtualisation VMware / Hyper-V',
+    'Réseaux, VLAN et VPN IPsec',
+    'Stormshield',
+    'Veeam Backup & Replication',
+    'Supervision Nagios',
+    'Cybersécurité',
+    'Gestion de projet IT',
+    'Microsoft 365',
+  ],
 };
 
 export default function App() {
