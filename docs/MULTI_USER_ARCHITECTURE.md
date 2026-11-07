@@ -7,8 +7,8 @@
 - Préférences, offres sauvegardées et candidatures persistées dans le `localStorage` du navigateur.
 - Les routes `/api/market-brief` et `/api/match-offer` sont publiques. Le profil envoyé à Matcher vient actuellement du client.
 - Les agents Ollama sont exécutés côté serveur, ce qui permet de conserver les appels au modèle hors du navigateur.
-- Le dépôt ne contient pas de `package-lock.json` ni de configuration Docker Compose.
-- `.env.example` contient encore des variables Gemini obsolètes et doit être aligné avec la configuration Ollama puis la future base/auth.
+- Le dépôt ne contient pas de `package-lock.json`.
+- Docker Compose et le modèle `.env.example` ont été ajoutés pour lancer PostgreSQL localement ; l'application n'est pas encore connectée à la base.
 
 ## Architecture cible proposée
 
@@ -40,13 +40,14 @@
 
 ## Plan d'implémentation
 
-1. Ajouter PostgreSQL local avec Docker Compose, variables d'environnement et vérification de connexion.
-2. Installer et configurer Better Auth + Drizzle ; créer inscription/connexion/déconnexion et protection des routes.
-3. Créer les tables métier et les migrations.
-4. Remplacer progressivement les lectures/écritures localStorage par l'API authentifiée.
-5. Prévoir une importation explicite des anciennes données localStorage vers le compte connecté, sans importer les données de démonstration comme de vraies candidatures.
-6. Adapter les endpoints briefing et matching pour charger le profil du compte côté serveur.
-7. Ajouter des tests d'isolation : un compte A ne peut jamais lire, modifier ou supprimer les données du compte B.
+1. [En place] Ajouter PostgreSQL local avec Docker Compose et variables d'environnement.
+2. [À faire] Ajouter le client PostgreSQL, Drizzle et les migrations ; vérifier la connexion depuis le serveur.
+3. Installer et configurer Better Auth ; créer inscription/connexion/déconnexion et protection des routes.
+4. Créer les tables métier et les migrations.
+5. Remplacer progressivement les lectures/écritures localStorage par l'API authentifiée.
+6. Prévoir une importation explicite des anciennes données localStorage vers le compte connecté, sans importer les données de démonstration comme de vraies candidatures.
+7. Adapter les endpoints briefing et matching pour charger le profil du compte côté serveur.
+8. Ajouter des tests d'isolation : un compte A ne peut jamais lire, modifier ou supprimer les données du compte B.
 
 ## Décisions à confirmer avant le premier changement technique
 
