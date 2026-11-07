@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { generateDefaultBrief, generateDynamicRegionalOffers } from './src/data/regionalJobData';
 import { FrenchRegion, JobDomain, UserPreferences } from './src/types/jobMarket';
 import { checkOllama, runAssistedBriefingAgents, runOfferMatcher } from './src/server/ollamaAgents';
+import { checkDatabaseConnection } from './src/db';
 
 dotenv.config();
 
@@ -18,6 +19,23 @@ app.use(express.json({ limit: '1mb' }));
 
 const nowTime = () => new Date().toLocaleTimeString('fr-FR', {
   hour: '2-digit', minute: '2-digit', second: '2-digit',
+});
+
+// Database health endpoint: verifies PostgreSQL through Drizzle ORM.
+app.get('/api/db-health', async (_req, res) => {
+  try {
+    await checkDatabaseConnection();
+    res.json({ status: 'ok', provider: 'postgresql', connected: true, timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('PostgreSQL connection failed:', error);
+    res.status(503).json({
+      status: 'degraded',
+      provider: 'postgresql',
+      connected: false,
+      error: error instanceof Error ? error.message : 'Connexion PostgreSQL impossible',
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // Health endpoint: reports the local model connection and availability.
