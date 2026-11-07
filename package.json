@@ -12,7 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:check": "tsx scripts/check-database.ts",
-    "auth:generate": "auth generate --config ./src/server/auth.ts --adapter drizzle --dialect postgresql --output ./src/db/auth-schema.ts"
+    "auth:generate": "npx auth@latest generate --config ./src/server/auth.ts --adapter drizzle --dialect postgresql --output ./src/db/auth-schema.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
