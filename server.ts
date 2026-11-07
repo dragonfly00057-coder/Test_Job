@@ -3,323 +3,131 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
-import { generateDefaultBrief, generateDynamicRegionalOffers, SAMPLE_OFFERS } from './src/data/regionalJobData';
-import { FrenchRegion, JobDomain, JobOffer } from './src/types/jobMarket';
+import { generateDefaultBrief, generateDynamicRegionalOffers } from './src/data/regionalJobData';
+import { FrenchRegion, JobDomain, UserPreferences } from './src/types/jobMarket';
+import { checkOllama, runAssistedBriefingAgents, runOfferMatcher } from './src/server/ollamaAgents';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
-// Initialize Gemini client with telemetry header
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
+const nowTime = () => new Date().toLocaleTimeString('fr-FR', {
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    geminiConfigured: !!process.env.GEMINI_API_KEY,
-    timestamp: new Date().toISOString(),
-  });
+// Health endpoint: reports the local model connection and availability.
+app.get('/api/health', async (_req, res) => {
+  try {
+    const ollama = await checkOllama();
+    res.json({ status: 'ok', provider: 'ollama', ...ollama, timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(503).json({
+      status: 'degraded',
+      provider: 'ollama',
+      connected: false,
+      model: process.env.OLLAMA_MODEL || 'qwen3:8b',
+      error: error instanceof Error ? error.message : 'Ollama indisponible',
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
-// Helper for timing out slow remote LLM calls
-function timeoutPromise<T>(promise: Promise<T>, ms: number, fallbackValue: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallbackValue), ms)),
-  ]);
-}
-
-// Generate or update daily morning brief
+// Assisted workflow: launched on demand by the UI. Agents only analyze the local demo dataset
+// until a real job-board API has been configured.
 app.post('/api/market-brief', async (req, res) => {
-  const { region, domain, jobTitle, experienceLevel, remotePreference } = req.body;
+  const body = req.body as Partial<UserPreferences>;
+  const validRegion = (body.region || 'Grand Est') as FrenchRegion;
+  const validDomain = (body.domain || 'Informatique & Tech') as JobDomain;
+  const validJob = body.jobTitle || 'Administrateur systèmes et réseaux';
+  const preferences = {
+    region: validRegion,
+    domain: validDomain,
+    jobTitle: validJob,
+    experienceLevel: body.experienceLevel || 'Intermédiaire (3-5 ans)',
+    remotePreference: body.remotePreference || 'Hybride (2-3j/semaine)',
+    morningTime: body.morningTime || '07:30',
+    notificationEnabled: body.notificationEnabled ?? false,
+    userSkills: Array.isArray(body.userSkills) ? body.userSkills : [],
+  } as UserPreferences;
 
-  const validRegion = (region || 'Auvergne-Rhône-Alpes') as FrenchRegion;
-  const validDomain = (domain || 'Informatique & Tech') as JobDomain;
-  const validJob = jobTitle || 'Développeur Fullstack';
-
-  // Fallback template and dynamic fresh offers
   const fallback = generateDefaultBrief(validRegion, validDomain, validJob);
-  const freshOffers = generateDynamicRegionalOffers(validRegion, validDomain, validJob);
-
-  if (!process.env.GEMINI_API_KEY) {
-    return res.json({
-      brief: fallback,
-      offers: freshOffers,
-      source: 'local_database',
-      refreshedAt: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    });
-  }
+  const offers = generateDynamicRegionalOffers(validRegion, validDomain, validJob);
 
   try {
-    const todayFormatted = new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    }).format(new Date());
-
-    const prompt = `Génère le BRIEFING MATINAL de l'emploi pour ${todayFormatted} en France.
-Région : ${validRegion}
-Domaine : ${validDomain}
-Poste ciblé : ${validJob}
-Expérience : ${experienceLevel || '3-5 ans'}
-Télétravail : ${remotePreference || 'Hybride'}
-
-Donne des constats concrets pour ${validRegion}, les salaires régionaux observés, 4 compétences clés et 3-4 entreprises régionales en recrutement actif. Réponds en JSON.`;
-
-    const apiCall = ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            date: { type: Type.STRING },
-            marketTensionLabel: {
-              type: Type.STRING,
-              description: "Ex: 'Marché très dynamique (Pénurie de profils)' ou 'Marché équilibré' ou 'Marché sélectif'",
-            },
-            marketTensionScore: {
-              type: Type.NUMBER,
-              description: "Score de tension entre 1 et 100",
-            },
-            freshOffersCount: {
-              type: Type.NUMBER,
-              description: "Nombre estimé de nouvelles offres apparues depuis 24h",
-            },
-            weekVariationRate: {
-              type: Type.STRING,
-              description: "Ex: '+12% vs semaine précédente'",
-            },
-            executiveSummary: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "3 à 4 constats clés majeurs sur le marché ce matin",
-            },
-            salaryBenchmark: {
-              type: Type.OBJECT,
-              properties: {
-                min: { type: Type.NUMBER, description: "Salaire min en k€ brut annuel" },
-                median: { type: Type.NUMBER, description: "Salaire médian en k€ brut annuel" },
-                max: { type: Type.NUMBER, description: "Salaire max en k€ brut annuel" },
-                currency: { type: Type.STRING, description: "k€ brut/an" },
-                trendComment: { type: Type.STRING, description: "Commentaire court sur la négociation et l'évolution" },
-              },
-              required: ['min', 'median', 'max', 'currency', 'trendComment'],
-            },
-            emergingSkills: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  category: { type: Type.STRING, description: "Technique, Méthodologie, Outil ou Soft skill" },
-                  demandLevel: { type: Type.STRING, description: "Très forte, Forte, ou En croissance" },
-                  growthPercentage: { type: Type.STRING, description: "Ex: +45%" },
-                  context: { type: Type.STRING, description: "Pourquoi cette compétence est recherchée dans la région" },
-                },
-                required: ['name', 'category', 'demandLevel', 'growthPercentage', 'context'],
-              },
-            },
-            topRecruiters: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  city: { type: Type.STRING },
-                  domain: { type: Type.STRING },
-                  openPositionsCount: { type: Type.NUMBER },
-                  highlight: { type: Type.STRING },
-                },
-                required: ['name', 'city', 'domain', 'openPositionsCount', 'highlight'],
-              },
-            },
-            morningAdvice: {
-              type: Type.STRING,
-              description: "Un conseil tactique actionnable immédiatement ce matin pour le candidat",
-            },
-            economicContext: {
-              type: Type.STRING,
-              description: "Contexte macro-économique de la région",
-            },
-            voiceScript: {
-              type: Type.STRING,
-              description: "Texte fluide de 40 secondes pour lecture audio",
-            },
-          },
-          required: [
-            'date',
-            'marketTensionLabel',
-            'marketTensionScore',
-            'freshOffersCount',
-            'weekVariationRate',
-            'executiveSummary',
-            'salaryBenchmark',
-            'emergingSkills',
-            'topRecruiters',
-            'morningAdvice',
-            'economicContext',
-            'voiceScript',
-          ],
-        },
-      },
+    const result = await runAssistedBriefingAgents({ preferences, offers, fallback });
+    res.json({
+      brief: result.brief,
+      offers,
+      source: 'ollama_assisted_demo_data',
+      dataNotice: 'Données locales de démonstration : aucune offre n’a été vérifiée sur un site d’emploi.',
+      agents: result.agents,
+      provider: 'ollama',
+      model: process.env.OLLAMA_MODEL || 'qwen3:8b',
+      refreshedAt: nowTime(),
     });
-
-    // 6-second timeout race to ensure lightning-fast UI responsiveness
-    const response = await timeoutPromise(apiCall, 6000, null as any);
-
-    if (!response || !response.text) {
-      return res.json({
-        brief: fallback,
-        offers: freshOffers,
-        source: 'fast_fallback',
-        refreshedAt: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      });
-    }
-
-    const parsed = JSON.parse(response.text || '{}');
-    const brief = {
-      ...parsed,
-      region: validRegion,
-      domain: validDomain,
-      jobTitleTarget: validJob,
-    };
-
-    return res.json({
-      brief,
-      offers: freshOffers,
-      source: 'gemini_live',
-      refreshedAt: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    });
-  } catch (error: any) {
-    console.error('Error querying Gemini API for market brief:', error);
-    return res.json({
-      brief: fallback,
-      offers: freshOffers,
-      source: 'fallback_error',
-      refreshedAt: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  } catch (error) {
+    console.error('Assisted agent workflow failed:', error);
+    res.status(503).json({
+      error: 'Le workflow d’agents Ollama n’a pas pu aboutir.',
+      details: error instanceof Error ? error.message : 'Erreur inconnue',
+      hint: 'Vérifiez qu’Ollama fonctionne et que le modèle qwen3:8b est téléchargé (ollama pull qwen3:8b).',
     });
   }
 });
 
-// Match a job offer with user profile
+// Offer matching is also performed locally by Qwen3.
 app.post('/api/match-offer', async (req, res) => {
-  const { offer, userProfile } = req.body;
-
-  if (!offer) {
-    return res.status(400).json({ error: 'Offre manquante' });
-  }
-
-  const defaultMatch = {
-    matchScore: 88,
-    strengths: [
-      `Votre profil en ${userProfile?.domain || offer.domain} cadre bien avec les besoins de ${offer.company}.`,
-      `Localisation compatible avec vos préférences en région ${offer.region}.`,
-    ],
-    missingSkills: ['Valorisez vos réalisations concrètes et métriques chiffrées lors de l\'entretien.'],
-    recommendedPitch: `Bonjour, vivement intéressé(e) par votre offre de ${offer.title} chez ${offer.company}, mon parcours correspond aux compétences clés recherchées. Je serais ravi(e) d'échanger avec vous.`,
-    salaryNegotiationTip: `Pour cette offre affichée à ${offer.salaryDisplay}, vous pouvez viser le milieu ou haut de fourchette en mettant en avant votre autonomie opérationnelle.`,
-  };
-
-  if (!process.env.GEMINI_API_KEY) {
-    return res.json(defaultMatch);
-  }
+  const { offer, userProfile } = req.body || {};
+  if (!offer || !userProfile) return res.status(400).json({ error: 'Offre ou profil manquant.' });
 
   try {
-    const prompt = `Analyse l'adéquation :
-Offre: ${offer.title} chez ${offer.company} (${offer.location}, ${offer.salaryDisplay}).
-Profil: ${userProfile?.jobTitle || 'Candidat'} - ${userProfile?.experienceLevel || '3-5 ans'} (${userProfile?.region || offer.region}).
-Compétences déclarées: ${(userProfile?.userSkills || []).join(', ')}.`;
-
-    const apiCall = ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            matchScore: { type: Type.NUMBER },
-            strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-            missingSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
-            recommendedPitch: { type: Type.STRING },
-            salaryNegotiationTip: { type: Type.STRING },
-          },
-          required: ['matchScore', 'strengths', 'missingSkills', 'recommendedPitch', 'salaryNegotiationTip'],
-        },
-      },
+    const result = await runOfferMatcher(offer, userProfile);
+    res.json({ ...result, provider: 'ollama', model: process.env.OLLAMA_MODEL || 'qwen3:8b' });
+  } catch (error) {
+    console.error('Offer matching failed:', error);
+    res.status(503).json({
+      error: 'Impossible de lancer l’agent Matcher.',
+      details: error instanceof Error ? error.message : 'Erreur inconnue',
+      hint: 'Vérifiez Ollama et le modèle qwen3:8b.',
     });
-
-    const response = await timeoutPromise(apiCall, 5000, null as any);
-    if (!response || !response.text) {
-      return res.json(defaultMatch);
-    }
-
-    const result = JSON.parse(response.text || '{}');
-    return res.json(result);
-  } catch (error: any) {
-    console.error('Error in match-offer:', error);
-    return res.json(defaultMatch);
   }
 });
 
-// Generate fresh job offers stream for the region/domain
-app.post('/api/fetch-offers', async (req, res) => {
-  const { region, domain, jobTitle } = req.body;
-  const targetRegion = (region || 'Auvergne-Rhône-Alpes') as FrenchRegion;
+// Explicitly returns the current local demo dataset. This endpoint does not scrape job boards.
+app.post('/api/fetch-offers', (req, res) => {
+  const { region, domain, jobTitle } = req.body || {};
+  const targetRegion = (region || 'Grand Est') as FrenchRegion;
   const targetDomain = (domain || 'Informatique & Tech') as JobDomain;
-
-  const dynamicOffers = generateDynamicRegionalOffers(targetRegion, targetDomain, jobTitle || 'Développeur');
-
+  const offers = generateDynamicRegionalOffers(targetRegion, targetDomain, jobTitle || 'Administrateur systèmes et réseaux');
   res.json({
-    offers: dynamicOffers,
-    count: dynamicOffers.length,
-    timestamp: new Date().toLocaleTimeString('fr-FR'),
+    offers,
+    count: offers.length,
+    source: 'local_demo_dataset',
+    dataNotice: 'Offres fictives de démonstration, non vérifiées en temps réel.',
+    timestamp: nowTime(),
   });
 });
 
-// Mount Vite middleware or static serving
 async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';
-
   if (isDev) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
+    app.get('*', (_req, res) => res.sendFile(path.resolve(distPath, 'index.html')));
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 MatinalJob server running on http://0.0.0.0:${PORT}`);
+    console.log(`MatinalJob server running on http://0.0.0.0:${PORT}`);
+    console.log(`AI provider: Ollama (${process.env.OLLAMA_MODEL || 'qwen3:8b'})`);
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-});
+startServer().catch((err) => console.error('Failed to start server:', err));
