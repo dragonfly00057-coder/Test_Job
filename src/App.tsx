@@ -135,7 +135,11 @@ export default function App() {
           body: JSON.stringify(prefs),
         });
 
-        if (response.ok) {
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData?.details || errorData?.error || `Erreur serveur ${response.status}`);
+        }
+        {
           const data = await response.json();
           if (data?.brief) {
             setBrief(data.brief);
