@@ -76,10 +76,14 @@ function buildEvidence(offers: JobOffer[]) {
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
     .sort((a, b) => a - b);
 
-  const median = salaries.length
-    ? salaries.length % 2
-      ? salaries[Math.floor(salaries.length / 2)]
-      : (salaries[salaries.length / 2 - 1] + salaries[salaries.length / 2]) / 2
+  const midpoints = offers
+    .filter((offer) => typeof offer.salaryMin === 'number' && typeof offer.salaryMax === 'number')
+    .map((offer) => ((offer.salaryMin as number) + (offer.salaryMax as number)) / 2)
+    .sort((a, b) => a - b);
+  const medianEstimate = midpoints.length
+    ? midpoints.length % 2
+      ? midpoints[Math.floor(midpoints.length / 2)]
+      : (midpoints[midpoints.length / 2 - 1] + midpoints[midpoints.length / 2]) / 2
     : null;
 
   const companyCounts = new Map<string, number>();
@@ -97,7 +101,7 @@ function buildEvidence(offers: JobOffer[]) {
     freshOffersCount: offers.filter((offer) => offer.isFreshToday).length,
     locations: [...new Set(offers.map((offer) => offer.location))],
     salary: salaries.length
-      ? { min: salaries[0], median, max: salaries[salaries.length - 1], unit: 'k€ brut annuel' }
+      ? { min: Math.min(...offers.map((offer) => offer.salaryMin).filter((value): value is number => typeof value === 'number')), medianEstimate, max: Math.max(...offers.map((offer) => offer.salaryMax).filter((value): value is number => typeof value === 'number')), unit: 'k€ brut annuel', note: 'Médiane estimée à partir des milieux de fourchettes des données locales, pas une médiane de marché.' }
       : null,
     companies: [...companyCounts.entries()].map(([name, count]) => ({ name, offers: count })),
     mostRequestedRequirements: [...skillCounts.entries()]
@@ -156,7 +160,7 @@ export async function runAssistedBriefingAgents(args: {
       'Tu es Analyst, un agent d’analyse du marché de l’emploi.',
       'Tu travailles uniquement à partir des éléments fournis. Ne prétends jamais avoir effectué une recherche Internet.',
       'Le jeu de données est une démonstration locale : indique clairement cette limite dans economicContext et morningAdvice.',
-      'Ne fabrique aucune statistique. Pour les salaires, reprends uniquement les valeurs de evidence.salary si elles existent ; sinon conserve des valeurs prudentes.',
+      'Ne fabrique aucune statistique. Pour les salaires, reprends uniquement les bornes de evidence.salary ; utilise medianEstimate uniquement comme estimation issue des milieux de fourchettes, jamais comme médiane du marché.',
       'Réponds exclusivement en JSON valide, sans Markdown.',
       'Schéma attendu : date, marketTensionLabel, marketTensionScore, freshOffersCount, weekVariationRate, executiveSummary (string[]), salaryBenchmark (min, median, max, currency, trendComment), emergingSkills (name, category, demandLevel, growthPercentage, context), topRecruiters (name, city, domain, openPositionsCount, highlight), morningAdvice, economicContext, voiceScript.',
     ].join(' '),
