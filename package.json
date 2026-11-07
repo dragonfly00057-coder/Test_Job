@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:check": "tsx scripts/check-database.ts"
+    "db:check": "tsx scripts/check-database.ts",
+    "auth:generate": "auth generate --config ./src/server/auth.ts --adapter drizzle --dialect postgresql --output ./src/db/auth-schema.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -24,7 +25,8 @@
     "dotenv": "^17.2.3",
     "motion": "^12.23.24",
     "drizzle-orm": "^0.45.4",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "better-auth": "^1.4.18"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
